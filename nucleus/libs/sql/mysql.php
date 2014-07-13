@@ -44,24 +44,30 @@ if (function_exists('mysql_query') && !function_exists('sql_fetch_assoc'))
 	}
 	
 	/**
-	  * Connects to mysql server with arguments
-	  */
-	function sql_connect_args($mysql_host = 'localhost', $mysql_user = '', $mysql_password = '', $mysql_database = '') {
-		
-		$CONN = mysql_connect($mysql_host, $mysql_user, $mysql_password); 
-		if ($mysql_database) sql_select_db($mysql_database,$CONN);
+	 * Connects to mysql server with arguments
+	 */
+	function sql_connect_args($mysql_host = 'localhost', $mysql_user = '', $mysql_password = '', $mysql_database = '', $new_link = FALSE)
+	{
+		$CONN = @mysql_connect($mysql_host, $mysql_user, $mysql_password, $new_link) or startUpError('<p>Could not connect to MySQL database.</p>', 'Connect Error');
+
+		if ( $mysql_database )
+		{
+			mysql_select_db($mysql_database,$CONN) or startUpError('<p>Could not select database: ' . mysql_error() . '</p>', 'Connect Error');
+			sql_set_charset('utf8');
+		}
 
 		return $CONN;
 	}
 	
 	/**
-	  * Connects to mysql server
-	  */
+	 * Connects to mysql server
+	 */
 	function sql_connect() {
 		global $MYSQL_HOST, $MYSQL_USER, $MYSQL_PASSWORD, $MYSQL_DATABASE, $MYSQL_CONN;
 
 		$MYSQL_CONN = mysql_connect($MYSQL_HOST, $MYSQL_USER, $MYSQL_PASSWORD) or startUpError('<p>Could not connect to MySQL database.</p>', 'Connect Error');
-		sql_select_db($MYSQL_DATABASE,$MYSQL_CONN) or startUpError('<p>Could not select database: ' . mysql_error() . '</p>', 'Connect Error');
+		mysql_select_db($MYSQL_DATABASE) or startUpError('<p>Could not select database: ' . mysql_error() . '</p>', 'Connect Error');
+		sql_set_charset('utf8');
 
 		return $MYSQL_CONN;
 	}
@@ -144,9 +150,9 @@ if (function_exists('mysql_query') && !function_exists('sql_fetch_assoc'))
 	/**
 	  * executes an SQL result request
 	  */
-	function sql_result($res, $row, $col)
+	function sql_result($res, $row = 0, $col = 0)
 	{
-		return mysql_result($res,$row,$col);
+		return mysql_result($res, $row, $col);
 	}
 	
 	/**
@@ -288,7 +294,59 @@ if (function_exists('mysql_query') && !function_exists('sql_fetch_assoc'))
     {
         return mysql_field_name($res, $offset);
     }
-	
+
+	/**
+	 * Set character encodings in each fields related to MySQL connection.
+	 */
+	function sql_set_charset($charset)
+	{
+		global $MYSQL_CONN;
+
+		/*
+		 * NOTE:
+		 *
+		 * We decided to ignore which character encodings is set in each text field of MySQL table!
+		 *
+		 * There are differences between "SET NAMES xxx;" and "SET CHARACTER SET xxx;"
+		 *  according MySQL version.
+		 * http://dev.mysql.com/doc/refman/4.1/en/charset-connection.html
+		 * http://dev.mysql.com/doc/refman/5.1/en/charset-connection.html
+		 *
+		 * And mysql_set_charset() execute "SET NAMES xxx;" internally and set mysql->charset as xxx.
+		 *  refering to  MySQL C API.
+		 * http://dev.mysql.com/doc/refman/5.1/ja/mysql-set-character-set.html
+		 * http://php.net/manual/en/function.mysql-set-charset.php
+		 *
+		 * mysql_real_escape_string() is affected by mysql->charset,
+		 *  refering to  MySQL C API.
+		 * http://dev.mysql.com/doc/refman/5.1/en/mysql-real-escape-string.html
+		 * http://php.net/manual/en/function.mysql-real-escape-string.php
+		 *
+		 * But using the same character encoding in character_set_client and the strings is
+		 *  more important than mysql->charset
+		 *  because mysql_real_escape_string() escape some characters in ASCII character set.
+		 *
+		 */
+		$charset = strtolower($charset);
+		$mysql_version = preg_replace('#^([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{1,2})(.*)$#', '$1.$2.$3', sql_get_server_info($MYSQL_CONN));
+
+		if ( version_compare($mysql_version, '5.0.7', '>=') && function_exists('mysql_set_charset') )
+		{
+			$result = mysql_set_charset($charset, $MYSQL_CONN);
+			#$result = sql_query("SET NAMES {$charset};");
+		}
+		else if ( version_compare($mysql_version, '5.0.7', '<') )
+		{
+			$result = sql_query("SET CHARACTER SET {$charset};");
+		}
+		else
+		{
+			$result = sql_query("SET NAMES {$charset};");
+		}
+
+		return $result;
+	}
+
 /**************************************************************************
 Unimplemented mysql_* functions
 
