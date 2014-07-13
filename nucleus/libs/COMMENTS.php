@@ -280,7 +280,7 @@ class COMMENTS {
 //			$mailto_msg .= $CONF['IndexURL'] . 'index.php?itemid=' . $this->itemid . "\n\n";
 			$temp = parse_url($CONF['Self']);
 
-			if ( $temp['scheme'] )
+			if ( !empty($temp['scheme']) )
 			{
 				$mailto_msg .= createItemLink($this->itemid) . "\n\n";
 			}
